@@ -91,9 +91,13 @@ local function stopSlide()
 		slideConn = nil
 	end
 
-	TweenService:Create(humanoid, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-		HipHeight = normalHip,
-		WalkSpeed = normalSpeed
+	-- ✅ Snap WalkSpeed LANGSUNG agar animasi jalan normal setelah slide
+	-- (Jangan di-tween, karena tween WalkSpeed bikin animasi jalan jadi sped up)
+	humanoid.WalkSpeed = normalSpeed
+
+	-- Tween HipHeight kembali ke normal (berdiri)
+	TweenService:Create(humanoid, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
+		HipHeight = normalHip
 	}):Play()
 
 	canSlide = false
@@ -128,15 +132,21 @@ local function startSlide()
 		dir = Vector3.new(camLook.X, 0, camLook.Z).Unit
 	end
 
-	TweenService:Create(humanoid, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-		HipHeight = Config.SlideHipHeight,
-		WalkSpeed = Config.SlideSpeed
+	-- ✅ Set HipHeight (jongkok) dan matikan WalkSpeed
+	-- WalkSpeed = 0 agar player tidak bisa tambah kecepatan sendiri saat slide
+	-- dan agar animasi jalan tidak ikut jalan saat slide
+	humanoid.WalkSpeed = 0
+	TweenService:Create(humanoid, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {
+		HipHeight = Config.SlideHipHeight
 	}):Play()
 
+	-- ✅ Set velocity awal slide via AssemblyLinearVelocity (bukan WalkSpeed)
+	local slideVelX = dir.X * Config.SlideSpeed
+	local slideVelZ = dir.Z * Config.SlideSpeed
 	hrp.AssemblyLinearVelocity = Vector3.new(
-		dir.X * Config.SlideSpeed,
+		slideVelX,
 		hrp.AssemblyLinearVelocity.Y,
-		dir.Z * Config.SlideSpeed
+		slideVelZ
 	)
 
 	setTargetRoll(Config.CameraTiltAngle)
@@ -153,7 +163,7 @@ local function startSlide()
 		end)
 	end
 
-	-- === FALLBACK: timer heartbeat jika animasi Length = 0 (belum ter-stream) ===
+	-- === FALLBACK: Heartbeat fade velocity & safety stop ===
 	local elapsed = 0
 	slideConn = RunService.Heartbeat:Connect(function(dt)
 		if not isSliding then
@@ -163,7 +173,15 @@ local function startSlide()
 
 		elapsed = elapsed + dt
 		local t = math.clamp(elapsed / slideDuration, 0, 1)
-		humanoid.WalkSpeed = Config.SlideSpeed * (1 - t) + normalSpeed * t
+
+		-- ✅ Fade velocity secara langsung (bukan WalkSpeed)
+		-- Sehingga animasi jalan tidak terpengaruh
+		local currentSpeed = Config.SlideSpeed * (1 - t)
+		hrp.AssemblyLinearVelocity = Vector3.new(
+			dir.X * currentSpeed,
+			hrp.AssemblyLinearVelocity.Y,
+			dir.Z * currentSpeed
+		)
 
 		-- Safety fallback: paksa stop jika melebihi durasi
 		if elapsed >= slideDuration then
