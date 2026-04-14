@@ -18,11 +18,11 @@ local camera    = workspace.CurrentCamera
 -- ============================================
 local Config = {
 	SlideSpeed       = 45,
-	SlideDuration    = 0.85,
+	SlideDuration    = 1.4,
 	SlideCooldown    = 1.0,
 	SlideHipHeight   = -0.9,
 	CameraTiltAngle  = 6,
-	SlideAnimationId = "rbxassetid://2436646739",
+	SlideAnimationId = "rbxassetid://90262328649285",
 }
 
 -- ============================================
