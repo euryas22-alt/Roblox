@@ -63,19 +63,32 @@ local normalSpeed   = humanoid.WalkSpeed
 local sprintStamina = SPRINT_STAMINA
 local isSprinting   = false
 
--- Sprint diaktifkan dengan LeftShift
+-- Sprint: LeftShift, RightShift, atau klik kanan
+local function isSprintInput(input)
+	return input.KeyCode == Enum.KeyCode.LeftShift
+		or input.KeyCode == Enum.KeyCode.RightShift
+		or input.UserInputType == Enum.UserInputType.MouseButton2
+end
+
+local function anySprintKeyHeld()
+	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+		or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+		or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+end
+
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.KeyCode == Enum.KeyCode.LeftShift then
-		if sprintStamina > 0 then
-			isSprinting = true
-		end
+	if isSprintInput(input) and sprintStamina > 0 then
+		isSprinting = true
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.KeyCode == Enum.KeyCode.LeftShift then
-		isSprinting = false
+	if isSprintInput(input) then
+		-- Hanya berhenti sprint jika SEMUA tombol sprint sudah dilepas
+		if not anySprintKeyHeld() then
+			isSprinting = false
+		end
 	end
 end)
 
@@ -202,10 +215,11 @@ local function startDash()
 	print("[Dash] ▶ Dash! Charge tersisa: " .. dashCharges)
 end
 
--- Keyboard: E untuk dash
+-- Keyboard: E, atau klik kiri untuk dash
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.KeyCode == Enum.KeyCode.E then
+	if input.KeyCode == Enum.KeyCode.E
+		or input.UserInputType == Enum.UserInputType.MouseButton1 then
 		startDash()
 	end
 end)
@@ -307,9 +321,24 @@ UserInputService.JumpRequest:Connect(function()
 		jumpCount  = 1
 		isAirborne = true
 	elseif jumpCount < MAX_JUMPS then
-		-- Double jump (atau lebih, jika MAX_JUMPS > 2 suatu saat)
+		-- Double jump
 		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 		jumpCount += 1
+	end
+end)
+
+-- Klik tengah mouse juga bisa jump / double jump
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton3 then
+		if not isAirborne then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			jumpCount  = 1
+			isAirborne = true
+		elseif jumpCount < MAX_JUMPS then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			jumpCount += 1
+		end
 	end
 end)
 
