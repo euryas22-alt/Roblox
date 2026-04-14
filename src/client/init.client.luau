@@ -299,57 +299,58 @@ end)
 -- ============================================
 -- DOUBLE JUMP
 -- Bebas lompat selama belum menyentuh tanah/platform
--- Reset hanya saat mendarat
+-- Reset via Raycast (lebih andal dari StateChanged)
 -- ============================================
 local MAX_JUMPS  = 2
 local jumpCount  = 0
-local isAirborne = false
-local JUMP_POWER = 50   -- setara JumpPower default Roblox
+-- Pakai humanoid.JumpPower agar otomatis sesuai setting game
+local JUMP_POWER = humanoid.JumpPower > 0 and humanoid.JumpPower or 50
 
--- Fungsi jump terpusat — pakai velocity langsung, tidak pakai ChangeState
--- ChangeState(Jumping) sering gagal saat FreeFall, velocity lebih andal
+-- Raycast ke bawah untuk cek apakah di tanah
+local function isOnGround()
+	local rayParams = RaycastParams.new()
+	rayParams.FilterDescendantsInstances = { character }
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	-- Jarak 4.5 studs ke bawah (cukup untuk karakter R6 & R15)
+	local result = workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), rayParams)
+	return result ~= nil
+end
+
+-- Reset jumpCount setiap frame jika terdeteksi di tanah
+-- Ini lebih andal dari StateChanged karena tidak ada race condition
+RunService.Heartbeat:Connect(function()
+	-- Hanya reset kalau velocity Y tidak sedang naik (sedang lompat ke atas)
+	if isOnGround() and hrp.AssemblyLinearVelocity.Y <= 1 then
+		jumpCount = 0
+	end
+end)
+
+-- Fungsi jump terpusat
 local function doJump()
-	-- Reset Y velocity dulu agar ketinggian lompatan konsisten
 	hrp.AssemblyLinearVelocity = Vector3.new(
 		hrp.AssemblyLinearVelocity.X,
 		JUMP_POWER,
 		hrp.AssemblyLinearVelocity.Z
 	)
+	jumpCount += 1
 end
 
-humanoid.StateChanged:Connect(function(old, new)
-	if new == Enum.HumanoidStateType.Jumping or new == Enum.HumanoidStateType.FreeFall then
-		isAirborne = true
-	elseif new == Enum.HumanoidStateType.Landed or new == Enum.HumanoidStateType.Running then
-		jumpCount  = 0
-		isAirborne = false
-	end
-end)
-
-UserInputService.JumpRequest:Connect(function()
-	if not isAirborne then
-		-- Lompatan pertama: Roblox tangani, kita catat
-		jumpCount  = 1
-		isAirborne = true
-	elseif jumpCount < MAX_JUMPS then
-		-- Double jump via velocity langsung
+-- Fungsi yang dipanggil oleh semua trigger jump
+local function tryJump()
+	if jumpCount < MAX_JUMPS then
 		doJump()
-		jumpCount += 1
 	end
-end)
+end
 
--- Klik tengah mouse juga bisa jump / double jump
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+-- Space / default jump
+UserInputService.JumpRequest:Connect(tryJump)
+
+-- Klik tengah mouse — TANPA cek processed agar tidak diblokir oleh LockCenter
+UserInputService.InputBegan:Connect(function(input)
+	-- Sengaja tidak pakai 'processed' untuk mouse buttons
+	-- karena LockCenter sering menandai klik sebagai processed
 	if input.UserInputType == Enum.UserInputType.MouseButton3 then
-		if not isAirborne then
-			doJump()
-			jumpCount  = 1
-			isAirborne = true
-		elseif jumpCount < MAX_JUMPS then
-			doJump()
-			jumpCount += 1
-		end
+		tryJump()
 	end
 end)
 
