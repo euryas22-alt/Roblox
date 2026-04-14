@@ -283,3 +283,132 @@ player.CharacterAdded:Connect(function(newChar)
 end)
 
 print("[DashSystem] ✅ Genshin Double Dash loaded — " .. Config.MaxDashCharges .. " charges")
+
+-- ============================================
+-- DOUBLE JUMP & SPRINT — Naura
+-- ============================================
+
+local jumpMaxJump    = 2
+local jumpCount      = 0
+
+local sprintMaxStamina = 100
+local sprintDrainRate  = 20   -- per detik saat sprint
+local sprintRegenRate  = 10   -- per detik saat tidak sprint
+local sprintSpeed      = 30
+local sprintStamina    = sprintMaxStamina
+local isSprinting      = false
+local jumpNormalSpeed  = humanoid.WalkSpeed  -- baca dari humanoid, bukan hardcode
+
+-- FIX #1a: Reset jumpCount saat Landed
+humanoid.StateChanged:Connect(function(old, new)
+	if new == Enum.HumanoidStateType.Landed then
+		jumpCount = 0
+	end
+end)
+
+-- FIX #1b: Cek tanah via Raycast sebagai fallback
+local function isOnGround()
+	local rayOrigin    = hrp.Position
+	local rayDirection = Vector3.new(0, -3.5, 0)
+	local params       = RaycastParams.new()
+	params.FilterDescendantsInstances = { character }
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	return workspace:Raycast(rayOrigin, rayDirection, params) ~= nil
+end
+
+-- Double Jump input
+UserInputService.JumpRequest:Connect(function()
+	if jumpCount < jumpMaxJump then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		jumpCount += 1
+	end
+end)
+
+-- Sprint input
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	-- FIX #2: cek stamina > 0 saat tombol ditekan
+	if input.KeyCode == Enum.KeyCode.LeftShift and sprintStamina > 0 then
+		isSprinting = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.LeftShift then
+		isSprinting = false
+		-- hanya reset WalkSpeed kalau tidak sedang dash
+		if not isDashing then
+			humanoid.WalkSpeed = jumpNormalSpeed
+		end
+	end
+end)
+
+-- Stamina & Sprint loop
+RunService.RenderStepped:Connect(function(dt)
+	-- FIX #1b lanjutan: reset jumpCount kalau di tanah
+	if isOnGround() and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+		jumpCount = 0
+	end
+
+	-- FIX #4: update normalSpeed dinamis (saat tidak sprint/dash)
+	if not isSprinting and not isDashing then
+		jumpNormalSpeed = humanoid.WalkSpeed
+	end
+
+	if isSprinting and sprintStamina > 0 then
+		-- FIX #2: kalau stamina habis di tengah jalan, langsung berhenti
+		if not isDashing then
+			humanoid.WalkSpeed = sprintSpeed
+		end
+		sprintStamina -= sprintDrainRate * dt
+	else
+		-- FIX #3: regen lebih lambat saat bergerak, penuh saat diam
+		local flatVel  = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+		local isMoving = flatVel.Magnitude > 1
+
+		if isMoving then
+			sprintStamina += (sprintRegenRate * 0.5) * dt
+		else
+			sprintStamina += sprintRegenRate * dt
+		end
+
+		if not isDashing then
+			humanoid.WalkSpeed = jumpNormalSpeed
+		end
+	end
+
+	-- Paksa berhenti sprint kalau stamina habis
+	if sprintStamina <= 0 then
+		sprintStamina = 0
+		isSprinting   = false
+		if not isDashing then
+			humanoid.WalkSpeed = jumpNormalSpeed
+		end
+	end
+
+	sprintStamina = math.clamp(sprintStamina, 0, sprintMaxStamina)
+end)
+
+-- Reset Double Jump & Sprint saat respawn
+-- PENTING: handler ini harus TERPISAH dari respawn Dash agar
+-- humanoid & hrp yang dipakai Double Jump juga ikut update
+player.CharacterAdded:Connect(function(newChar)
+	-- Update referensi karakter baru untuk sistem Double Jump & Sprint
+	character   = newChar
+	humanoid    = newChar:WaitForChild("Humanoid")
+	hrp         = newChar:WaitForChild("HumanoidRootPart")
+
+	jumpCount      = 0
+	isSprinting    = false
+	sprintStamina  = sprintMaxStamina
+	jumpNormalSpeed = humanoid.WalkSpeed
+
+	-- Pasang ulang StateChanged untuk karakter baru
+	humanoid.StateChanged:Connect(function(old, new)
+		if new == Enum.HumanoidStateType.Landed then
+			jumpCount = 0
+		end
+	end)
+end)
+
+print("[DoubleJump & Sprint - Naura] ✅ Loaded")
