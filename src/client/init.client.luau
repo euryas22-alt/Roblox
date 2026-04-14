@@ -82,8 +82,9 @@ local function stopSlide()
 	if not isSliding then return end
 	isSliding = false
 
+	-- Blend out slide animation lebih lama agar tidak terpotong mendadak
 	if slideTrack and slideTrack.IsPlaying then
-		slideTrack:Stop(0.2)
+		slideTrack:Stop(0.35)
 	end
 
 	if slideConn then
@@ -91,14 +92,22 @@ local function stopSlide()
 		slideConn = nil
 	end
 
-	-- ✅ Snap WalkSpeed LANGSUNG agar animasi jalan normal setelah slide
-	-- (Jangan di-tween, karena tween WalkSpeed bikin animasi jalan jadi sped up)
-	humanoid.WalkSpeed = normalSpeed
+	-- Tahan WalkSpeed = 0 selama proses berdiri
+	-- (agar karakter tidak jalan saat masih rebahan/setengah berdiri)
+	humanoid.WalkSpeed = 0
 
-	-- Tween HipHeight kembali ke normal (berdiri)
-	TweenService:Create(humanoid, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
+	-- Tween HipHeight smooth ke posisi berdiri
+	local standDuration = 0.45
+	TweenService:Create(humanoid, TweenInfo.new(standDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		HipHeight = normalHip
 	}):Play()
+
+	-- Restore WalkSpeed SETELAH karakter selesai berdiri penuh
+	task.delay(standDuration, function()
+		if not isSliding then
+			humanoid.WalkSpeed = normalSpeed
+		end
+	end)
 
 	canSlide = false
 	task.delay(Config.SlideCooldown, function()
