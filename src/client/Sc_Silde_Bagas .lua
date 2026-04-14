@@ -98,14 +98,22 @@ function SlideController:Init()
 		if isSliding or not canSlide then return end
 
 		local vel = hrp.AssemblyLinearVelocity
+		local flatVel = Vector3.new(vel.X, 0, vel.Z)
+
+		-- Jika diam, gunakan arah depan kamera sebagai arah slide
+		local dir
+		if flatVel.Magnitude > 0.1 then
+			dir = flatVel.Unit
+		else
+			local camLook = camera.CFrame.LookVector
+			dir = Vector3.new(camLook.X, 0, camLook.Z).Unit
+		end
 
 		isSliding = true
 
 		if slideTrack and not slideTrack.IsPlaying then
 			slideTrack:Play(0.1)
 		end
-
-		local dir = Vector3.new(vel.X, 0, vel.Z).Unit
 
 		TweenService:Create(humanoid, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 			HipHeight = Config.SlideHipHeight,
