@@ -1,8 +1,8 @@
-local SlideController = {}
+local DashController = {}
 
 local initialized = false
 
-function SlideController:Init()
+function DashController:Init()
 	if initialized then return end
 	initialized = true
 
@@ -25,38 +25,38 @@ function SlideController:Init()
 	-- SETTINGS
 	-- ============================================
 	local Config = {
-		SlideSpeed      = 45,
-		SlideDuration   = 0.85,
-		SlideCooldown   = 1.0,
-		SlideHipHeight  = -0.9,
-		MinSpeedToSlide = 4,
-		CameraTiltAngle = 6,
-		SlideAnimationId = "rbxassetid://2436646739",
+		DashSpeed        = 45,
+		DashDuration     = 0.4,   -- Lebih pendek dari slide, lebih cocok untuk dash
+		DashCooldown     = 1.0,
+		DashHipHeight    = -0.9,
+		MinSpeedToDash   = 4,
+		CameraTiltAngle  = 6,
+		DashAnimationId  = "rbxassetid://2436646739",
 	}
 
 	-- ============================================
 	-- STATE
 	-- ============================================
-	local isSliding   = false
-	local canSlide    = true
-	local slideConn   = nil
-	local slideTrack  = nil
+	local isDashing   = false
+	local canDash     = true
+	local dashConn    = nil
+	local dashTrack   = nil
 	local normalHip   = humanoid.HipHeight
 	local normalSpeed = humanoid.WalkSpeed
 
 	-- ============================================
 	-- ANIMATION
 	-- ============================================
-	local slideAnim = Instance.new("Animation")
-	slideAnim.AnimationId = Config.SlideAnimationId
+	local dashAnim = Instance.new("Animation")
+	dashAnim.AnimationId = Config.DashAnimationId
 
 	local function loadAnimation()
-		if slideTrack then
-			slideTrack:Destroy()
+		if dashTrack then
+			dashTrack:Destroy()
 		end
-		slideTrack = animator:LoadAnimation(slideAnim)
-		slideTrack.Priority = Enum.AnimationPriority.Action
-		slideTrack.Looped   = false
+		dashTrack = animator:LoadAnimation(dashAnim)
+		dashTrack.Priority = Enum.AnimationPriority.Action
+		dashTrack.Looped   = false
 	end
 
 	loadAnimation()
@@ -70,17 +70,17 @@ function SlideController:Init()
 		}):Play()
 	end
 
-	local function stopSlide()
-		if not isSliding then return end
-		isSliding = false
+	local function stopDash()
+		if not isDashing then return end
+		isDashing = false
 
-		if slideTrack and slideTrack.IsPlaying then
-			slideTrack:Stop(0.2)
+		if dashTrack and dashTrack.IsPlaying then
+			dashTrack:Stop(0.2)
 		end
 
-		if slideConn then
-			slideConn:Disconnect()
-			slideConn = nil
+		if dashConn then
+			dashConn:Disconnect()
+			dashConn = nil
 		end
 
 		TweenService:Create(humanoid, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
@@ -88,19 +88,19 @@ function SlideController:Init()
 			WalkSpeed = normalSpeed
 		}):Play()
 
-		canSlide = false
-		task.delay(Config.SlideCooldown, function()
-			canSlide = true
+		canDash = false
+		task.delay(Config.DashCooldown, function()
+			canDash = true
 		end)
 	end
 
-	local function startSlide()
-		if isSliding or not canSlide then return end
+	local function startDash()
+		if isDashing or not canDash then return end
 
 		local vel = hrp.AssemblyLinearVelocity
 		local flatVel = Vector3.new(vel.X, 0, vel.Z)
 
-		-- Jika diam, gunakan arah depan kamera sebagai arah slide
+		-- Jika diam, gunakan arah depan kamera sebagai arah dash
 		local dir
 		if flatVel.Magnitude > 0.1 then
 			dir = flatVel.Unit
@@ -109,45 +109,45 @@ function SlideController:Init()
 			dir = Vector3.new(camLook.X, 0, camLook.Z).Unit
 		end
 
-		isSliding = true
+		isDashing = true
 
-		if slideTrack and not slideTrack.IsPlaying then
-			slideTrack:Play(0.1)
+		if dashTrack and not dashTrack.IsPlaying then
+			dashTrack:Play(0.1)
 		end
 
 		TweenService:Create(humanoid, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-			HipHeight = Config.SlideHipHeight,
-			WalkSpeed = Config.SlideSpeed
+			HipHeight = Config.DashHipHeight,
+			WalkSpeed = Config.DashSpeed
 		}):Play()
 
 		hrp.AssemblyLinearVelocity = Vector3.new(
-			dir.X * Config.SlideSpeed,
+			dir.X * Config.DashSpeed,
 			hrp.AssemblyLinearVelocity.Y,
-			dir.Z * Config.SlideSpeed
+			dir.Z * Config.DashSpeed
 		)
 
 		tiltCamera(Config.CameraTiltAngle)
 
 		local elapsed = 0
-		slideConn = RunService.Heartbeat:Connect(function(dt)
-			if not isSliding then
-				slideConn:Disconnect()
+		dashConn = RunService.Heartbeat:Connect(function(dt)
+			if not isDashing then
+				dashConn:Disconnect()
 				return
 			end
 
 			elapsed = elapsed + dt
-			local t = math.clamp(elapsed / Config.SlideDuration, 0, 1)
+			local t = math.clamp(elapsed / Config.DashDuration, 0, 1)
 
-			humanoid.WalkSpeed = Config.SlideSpeed * (1 - t) + normalSpeed * t
+			humanoid.WalkSpeed = Config.DashSpeed * (1 - t) + normalSpeed * t
 
-			if elapsed >= Config.SlideDuration then
+			if elapsed >= Config.DashDuration then
 				tiltCamera(-Config.CameraTiltAngle)
 
-				if slideTrack and slideTrack.IsPlaying then
-					slideTrack:Stop(0.15)
+				if dashTrack and dashTrack.IsPlaying then
+					dashTrack:Stop(0.15)
 				end
 
-				stopSlide()
+				stopDash()
 			end
 		end)
 	end
@@ -156,17 +156,17 @@ function SlideController:Init()
 	-- INPUT
 	-- ============================================
 	UserInputService.InputBegan:Connect(function(input, gpe)
-		-- Tidak pakai 'if gpe then return end' agar klik kiri selalu trigger slide
+		-- Tidak pakai 'if gpe then return end' agar klik kiri selalu trigger dash
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			startSlide()
+			startDash()
 		end
 	end)
 
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			if isSliding then
+			if isDashing then
 				tiltCamera(-Config.CameraTiltAngle)
-				stopSlide()
+				stopDash()
 			end
 		end
 	end)
@@ -175,7 +175,7 @@ function SlideController:Init()
 	-- MOBILE UI
 	-- ============================================
 	local gui = Instance.new("ScreenGui")
-	gui.Name = "SlideGui"
+	gui.Name = "DashGui"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.Parent = player.PlayerGui
@@ -201,7 +201,7 @@ function SlideController:Init()
 	icon.Size = UDim2.new(1, 0, 0.55, 0)
 	icon.Position = UDim2.new(0, 0, 0.08, 0)
 	icon.BackgroundTransparency = 1
-	icon.Text = "▼▼"
+	icon.Text = "▶▶"
 	icon.TextColor3 = Color3.fromRGB(255, 220, 60)
 	icon.TextScaled = true
 	icon.Font = Enum.Font.GothamBold
@@ -211,7 +211,7 @@ function SlideController:Init()
 	lbl.Size = UDim2.new(1, 0, 0.3, 0)
 	lbl.Position = UDim2.new(0, 0, 0.65, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.Text = "SLIDE"
+	lbl.Text = "DASH"
 	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 	lbl.TextScaled = true
 	lbl.Font = Enum.Font.GothamBold
@@ -226,14 +226,14 @@ function SlideController:Init()
 
 	btn.MouseButton1Down:Connect(function()
 		pressEffect(true)
-		startSlide()
+		startDash()
 	end)
 
 	btn.MouseButton1Up:Connect(function()
 		pressEffect(false)
-		if isSliding then
+		if isDashing then
 			tiltCamera(-Config.CameraTiltAngle)
-			stopSlide()
+			stopDash()
 		end
 	end)
 
@@ -246,20 +246,20 @@ function SlideController:Init()
 		animator   = humanoid:WaitForChild("Animator")
 		hrp        = newChar:WaitForChild("HumanoidRootPart")
 
-		isSliding  = false
-		canSlide   = true
+		isDashing  = false
+		canDash    = true
 		normalHip  = humanoid.HipHeight
 		normalSpeed = humanoid.WalkSpeed
 
-		if slideConn then
-			slideConn:Disconnect()
-			slideConn = nil
+		if dashConn then
+			dashConn:Disconnect()
+			dashConn = nil
 		end
 
 		loadAnimation()
 	end)
 
-	print("[SlideController] ✅ Loaded via Module")
+	print("[DashController] ✅ Loaded via Module")
 end
 
-return SlideController
+return DashController

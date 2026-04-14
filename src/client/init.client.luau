@@ -1,6 +1,9 @@
 -- ============================================
--- SERVICES
+-- GENSHIN-STYLE DOUBLE DASH SYSTEM
+-- 2 charge | per-charge cooldown | no stamina | no animation
 -- ============================================
+
+-- SERVICES
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
@@ -9,85 +12,61 @@ local RunService       = game:GetService("RunService")
 local player    = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid  = character:WaitForChild("Humanoid")
-local animator  = humanoid:WaitForChild("Animator")
 local hrp       = character:WaitForChild("HumanoidRootPart")
 local camera    = workspace.CurrentCamera
 
 -- ============================================
--- SETTINGS
+-- CONFIG
 -- ============================================
 local Config = {
-	DashSpeed       = 65,     -- kecepatan burst awal (Genshin-like)
-	DashDuration    = 0.4,    -- durasi singkat & snappy
-	DashCooldown    = 0.7,    -- cooldown
-	CameraTiltAngle = 10,     -- tilt lebih dramatis
-	NormalFOV       = 70,     -- FOV default
-	DashFOV         = 85,     -- FOV melebar saat dash (efek kecepatan)
-	DashAnimationId = "rbxassetid://90262328649285",
+	DashSpeed       = 65,    -- burst speed awal (studs/s)
+	DashDuration    = 0.35,  -- durasi setiap dash (detik)
+	DashCooldown    = 1.2,   -- waktu cooldown per charge (detik)
+	MaxDashCharges  = 2,     -- max charge (seperti Genshin: 2x dash)
+	CameraTiltAngle = 12,    -- kemiringan kamera saat dash
+	NormalFOV       = 70,    -- FOV normal
+	DashFOV         = 90,    -- FOV saat dash (efek kecepatan)
 }
 
 -- ============================================
 -- STATE
 -- ============================================
-local isDashing  = false
-local canDash    = true
-local dashConn   = nil
-local slideTrack = nil
-local normalHip  = humanoid.HipHeight
-local normalSpeed = humanoid.WalkSpeed
+local dashCharges  = Config.MaxDashCharges  -- charge saat ini
+local isDashing    = false
+local dashConn     = nil
+local normalSpeed  = humanoid.WalkSpeed
 
 -- Camera roll state
 local cameraRoll       = 0
 local cameraRollTarget = 0
 
 -- ============================================
--- ANIMATION
+-- CAMERA ROLL — berjalan SETELAH camera controller Roblox
+-- sehingga kamera tetap mengikuti player
 -- ============================================
-local slideAnim = Instance.new("Animation")
-slideAnim.AnimationId = Config.DashAnimationId
-
-local function loadAnimation()
-	if slideTrack then
-		slideTrack:Destroy()
-	end
-	slideTrack = animator:LoadAnimation(slideAnim)
-	slideTrack.Priority = Enum.AnimationPriority.Action
-	slideTrack.Looped   = false
-end
-
-loadAnimation()
-
--- ============================================
--- CAMERA ROLL (berjalan setelah camera controller Roblox)
--- Prioritas Camera+1 agar dieksekusi SETELAH kamera mengikuti player
--- sehingga kamera selalu mengikuti player, lalu roll ditambahkan di atasnya
--- ============================================
-RunService:BindToRenderStep("SlideCameraRoll", Enum.RenderPriority.Camera.Value + 1, function(dt)
-	-- Interpolasi roll menuju target secara smooth
-	cameraRoll = cameraRoll + (cameraRollTarget - cameraRoll) * math.min(1, dt * 12)
-
-	-- Terapkan roll hanya jika cukup besar (hindari noise)
+RunService:BindToRenderStep("DashCameraRoll", Enum.RenderPriority.Camera.Value + 1, function(dt)
+	cameraRoll = cameraRoll + (cameraRollTarget - cameraRoll) * math.min(1, dt * 14)
 	if math.abs(cameraRoll) > 0.0005 then
 		camera.CFrame = camera.CFrame * CFrame.Angles(0, 0, cameraRoll)
 	end
 end)
 
 -- ============================================
--- FUNCTIONS
+-- HELPER FUNCTIONS
 -- ============================================
+
 local function setTargetRoll(angle)
 	cameraRollTarget = math.rad(angle)
 end
 
--- Set FOV kamera dengan smooth tween
 local function setFOV(fov)
-	TweenService:Create(camera, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
+	TweenService:Create(camera, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
 		FieldOfView = fov
 	}):Play()
 end
 
--- I-frames: set CanCollide pada semua limb karakter
-local function setCharacterCollision(enabled)
+-- I-frames: matikan collision semua limb selama dash
+local function setCollision(enabled)
 	for _, part in ipairs(character:GetDescendants()) do
 		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
 			part.CanCollide = enabled
@@ -95,63 +74,63 @@ local function setCharacterCollision(enabled)
 	end
 end
 
+-- Konsumsi 1 charge dan jadwalkan regen-nya
+local function consumeCharge()
+	dashCharges = dashCharges - 1
+	task.delay(Config.DashCooldown, function()
+		dashCharges = math.min(dashCharges + 1, Config.MaxDashCharges)
+	end)
+end
+
+-- ============================================
+-- DASH CORE
+-- ============================================
+
 local function stopDash()
 	if not isDashing then return end
 	isDashing = false
-
-	-- Blend out animasi dash
-	if slideTrack and slideTrack.IsPlaying then
-		slideTrack:Stop(0.2)
-	end
 
 	if dashConn then
 		dashConn:Disconnect()
 		dashConn = nil
 	end
 
-	-- Kembalikan collision (i-frames selesai)
-	setCharacterCollision(true)
-
-	-- Kembalikan kamera
+	-- Kembalikan state
+	setCollision(true)
 	setTargetRoll(0)
 	setFOV(Config.NormalFOV)
-
-	-- Langsung restore WalkSpeed → langsung lari (Genshin-like)
 	humanoid.WalkSpeed = normalSpeed
-
-	canDash = false
-	task.delay(Config.DashCooldown, function()
-		canDash = true
-	end)
 end
 
 local function startDash()
-	if isDashing or not canDash then return end
+	if dashCharges <= 0 then return end
 
-	isDashing = true
-
-	if slideTrack and not slideTrack.IsPlaying then
-		slideTrack:Play(0.05)  -- blend in cepat untuk feel snappy
+	-- Jika sedang dash, cancel dulu (Genshin: dash bisa di-chain)
+	if isDashing then
+		if dashConn then
+			dashConn:Disconnect()
+			dashConn = nil
+		end
+		isDashing = false
 	end
 
-	-- Arah dash: dari velocity atau depan kamera
+	consumeCharge()
+	isDashing = true
+
+	-- Arah dash: ikut velocity atau depan kamera jika diam
 	local vel     = hrp.AssemblyLinearVelocity
 	local flatVel = Vector3.new(vel.X, 0, vel.Z)
 	local dir
 	if flatVel.Magnitude > 0.1 then
 		dir = flatVel.Unit
 	else
-		local camLook = camera.CFrame.LookVector
-		dir = Vector3.new(camLook.X, 0, camLook.Z).Unit
+		local look = camera.CFrame.LookVector
+		dir = Vector3.new(look.X, 0, look.Z).Unit
 	end
 
-	-- WalkSpeed = 0 saat dash (velocity dikontrol manual)
+	-- Set state dash
 	humanoid.WalkSpeed = 0
-
-	-- I-frames: matikan collision semua limb selama dash
-	setCharacterCollision(false)
-
-	-- Efek kamera: tilt + FOV melebar
+	setCollision(false)
 	setTargetRoll(Config.CameraTiltAngle)
 	setFOV(Config.DashFOV)
 
@@ -162,16 +141,7 @@ local function startDash()
 		dir.Z * Config.DashSpeed
 	)
 
-	-- Trigger utama: animasi selesai → stop dash
-	if slideTrack then
-		local conn
-		conn = slideTrack.Stopped:Connect(function()
-			conn:Disconnect()
-			if isDashing then stopDash() end
-		end)
-	end
-
-	-- Heartbeat: exponential decay velocity (burst cepat lalu smooth ke 0)
+	-- Heartbeat: exponential decay velocity (Genshin feel)
 	local elapsed = 0
 	dashConn = RunService.Heartbeat:Connect(function(dt)
 		if not isDashing then
@@ -182,8 +152,8 @@ local function startDash()
 		elapsed = elapsed + dt
 		local t = math.clamp(elapsed / Config.DashDuration, 0, 1)
 
-		-- Exponential decay: kecepatan turun cepat di akhir (seperti Genshin)
-		local easeOut = 1 - (1 - t)^3
+		-- Cubic ease-out: cepat di awal, smooth di akhir
+		local easeOut = 1 - (1 - t) ^ 3
 		local currentSpeed = Config.DashSpeed * (1 - easeOut)
 		hrp.AssemblyLinearVelocity = Vector3.new(
 			dir.X * currentSpeed,
@@ -191,7 +161,6 @@ local function startDash()
 			dir.Z * currentSpeed
 		)
 
-		-- Safety stop
 		if elapsed >= Config.DashDuration then
 			stopDash()
 		end
@@ -199,7 +168,7 @@ local function startDash()
 end
 
 -- ============================================
--- INPUT (Klik Kiri)
+-- INPUT — Klik Kiri
 -- ============================================
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe then return end
@@ -208,15 +177,11 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-	-- Dash tidak bisa di-cancel dengan lepas klik (Genshin-like: dash langsung selesai sendiri)
-end)
-
 -- ============================================
--- MOBILE UI (Tombol SLIDE)
+-- MOBILE UI — Tombol DASH
 -- ============================================
 local gui = Instance.new("ScreenGui")
-gui.Name = "SlideGui"
+gui.Name = "DashGui"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player.PlayerGui
@@ -225,43 +190,68 @@ local btn = Instance.new("ImageButton")
 btn.Size = UDim2.new(0, 80, 0, 80)
 btn.Position = UDim2.new(1, -200, 1, -130)
 btn.AnchorPoint = Vector2.new(0.5, 0.5)
-btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-btn.BackgroundTransparency = 0.25
+btn.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+btn.BackgroundTransparency = 0.2
 btn.Parent = gui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(1, 0)
-corner.Parent = btn
+Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
 
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(255, 200, 50)
+local stroke = Instance.new("UIStroke", btn)
+stroke.Color = Color3.fromRGB(100, 180, 255)
 stroke.Thickness = 2.5
-stroke.Parent = btn
 
-local icon = Instance.new("TextLabel")
+local icon = Instance.new("TextLabel", btn)
 icon.Size = UDim2.new(1, 0, 0.55, 0)
 icon.Position = UDim2.new(0, 0, 0.08, 0)
 icon.BackgroundTransparency = 1
-icon.Text = "▼▼"
-icon.TextColor3 = Color3.fromRGB(255, 220, 60)
+icon.Text = "»»"
+icon.TextColor3 = Color3.fromRGB(120, 200, 255)
 icon.TextScaled = true
 icon.Font = Enum.Font.GothamBold
-icon.Parent = btn
 
-local lbl = Instance.new("TextLabel")
+local lbl = Instance.new("TextLabel", btn)
 lbl.Size = UDim2.new(1, 0, 0.3, 0)
 lbl.Position = UDim2.new(0, 0, 0.65, 0)
 lbl.BackgroundTransparency = 1
-lbl.Text = "SLIDE"
+lbl.Text = "DASH"
 lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 lbl.TextScaled = true
 lbl.Font = Enum.Font.GothamBold
-lbl.Parent = btn
+
+-- Charge indicator (2 titik = 2 charge)
+local chargeBar = Instance.new("Frame", btn)
+chargeBar.Size = UDim2.new(0.8, 0, 0.08, 0)
+chargeBar.Position = UDim2.new(0.1, 0, 0, -12)
+chargeBar.BackgroundTransparency = 1
+
+local chargeDots = {}
+for i = 1, Config.MaxDashCharges do
+	local dot = Instance.new("Frame", chargeBar)
+	dot.Size = UDim2.new(1 / Config.MaxDashCharges - 0.05, 0, 1, 0)
+	dot.Position = UDim2.new((i - 1) / Config.MaxDashCharges + 0.025, 0, 0, 0)
+	dot.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+	dot.BorderSizePixel = 0
+	Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+	chargeDots[i] = dot
+end
+
+-- Update warna dot sesuai charge tersisa
+RunService.Heartbeat:Connect(function()
+	for i, dot in ipairs(chargeDots) do
+		if i <= dashCharges then
+			dot.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+			dot.BackgroundTransparency = 0
+		else
+			dot.BackgroundTransparency = 0.6
+			dot.BackgroundColor3 = Color3.fromRGB(60, 80, 100)
+		end
+	end
+end)
 
 local function pressEffect(pressing)
 	TweenService:Create(btn, TweenInfo.new(0.08), {
 		Size = pressing and UDim2.new(0, 70, 0, 70) or UDim2.new(0, 80, 0, 80),
-		BackgroundTransparency = pressing and 0.05 or 0.25
+		BackgroundTransparency = pressing and 0.05 or 0.2
 	}):Play()
 end
 
@@ -272,29 +262,24 @@ end)
 
 btn.MouseButton1Up:Connect(function()
 	pressEffect(false)
-	-- Dash tidak bisa di-cancel (selesai sendiri)
 end)
 
 -- ============================================
--- RESPAWN
+-- RESPAWN — reset state
 -- ============================================
 player.CharacterAdded:Connect(function(newChar)
 	character   = newChar
 	humanoid    = newChar:WaitForChild("Humanoid")
-	animator    = humanoid:WaitForChild("Animator")
 	hrp         = newChar:WaitForChild("HumanoidRootPart")
 
-	isDashing   = false
-	canDash     = true
-	normalHip   = humanoid.HipHeight
-	normalSpeed = humanoid.WalkSpeed
+	isDashing    = false
+	dashCharges  = Config.MaxDashCharges
+	normalSpeed  = humanoid.WalkSpeed
 
 	if dashConn then
 		dashConn:Disconnect()
 		dashConn = nil
 	end
-
-	loadAnimation()
 end)
 
-print("[SlideController] ✅ Loaded langsung di LocalScript")
+print("[DashSystem] ✅ Genshin Double Dash loaded — " .. Config.MaxDashCharges .. " charges")
