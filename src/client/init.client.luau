@@ -111,6 +111,11 @@ local function startSlide()
 		slideTrack:Play(0.1)
 	end
 
+	-- Baca durasi dari animasi; fallback ke Config.SlideDuration jika belum ter-stream
+	local slideDuration = (slideTrack and slideTrack.Length > 0.01)
+		and slideTrack.Length
+		or Config.SlideDuration
+
 	local vel     = hrp.AssemblyLinearVelocity
 	local flatVel = Vector3.new(vel.X, 0, vel.Z)
 
@@ -136,6 +141,19 @@ local function startSlide()
 
 	setTargetRoll(Config.CameraTiltAngle)
 
+	-- === TRIGGER UTAMA: animasi selesai → otomatis stop slide ===
+	if slideTrack then
+		local conn
+		conn = slideTrack.Stopped:Connect(function()
+			conn:Disconnect()
+			if isSliding then
+				setTargetRoll(0)
+				stopSlide()
+			end
+		end)
+	end
+
+	-- === FALLBACK: timer heartbeat jika animasi Length = 0 (belum ter-stream) ===
 	local elapsed = 0
 	slideConn = RunService.Heartbeat:Connect(function(dt)
 		if not isSliding then
@@ -144,10 +162,11 @@ local function startSlide()
 		end
 
 		elapsed = elapsed + dt
-		local t = math.clamp(elapsed / Config.SlideDuration, 0, 1)
+		local t = math.clamp(elapsed / slideDuration, 0, 1)
 		humanoid.WalkSpeed = Config.SlideSpeed * (1 - t) + normalSpeed * t
 
-		if elapsed >= Config.SlideDuration then
+		-- Safety fallback: paksa stop jika melebihi durasi
+		if elapsed >= slideDuration then
 			setTargetRoll(0)
 			if slideTrack and slideTrack.IsPlaying then
 				slideTrack:Stop(0.15)
