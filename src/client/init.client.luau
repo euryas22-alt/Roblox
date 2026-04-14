@@ -35,6 +35,10 @@ local slideTrack  = nil
 local normalHip   = humanoid.HipHeight
 local normalSpeed = humanoid.WalkSpeed
 
+-- Camera roll state
+local cameraRoll       = 0   -- nilai roll saat ini (radian)
+local cameraRollTarget = 0   -- target roll (radian)
+
 -- ============================================
 -- ANIMATION
 -- ============================================
@@ -53,12 +57,25 @@ end
 loadAnimation()
 
 -- ============================================
+-- CAMERA ROLL (berjalan setelah camera controller Roblox)
+-- Prioritas Camera+1 agar dieksekusi SETELAH kamera mengikuti player
+-- sehingga kamera selalu mengikuti player, lalu roll ditambahkan di atasnya
+-- ============================================
+RunService:BindToRenderStep("SlideCameraRoll", Enum.RenderPriority.Camera.Value + 1, function(dt)
+	-- Interpolasi roll menuju target secara smooth
+	cameraRoll = cameraRoll + (cameraRollTarget - cameraRoll) * math.min(1, dt * 12)
+
+	-- Terapkan roll hanya jika cukup besar (hindari noise)
+	if math.abs(cameraRoll) > 0.0005 then
+		camera.CFrame = camera.CFrame * CFrame.Angles(0, 0, cameraRoll)
+	end
+end)
+
+-- ============================================
 -- FUNCTIONS
 -- ============================================
-local function tiltCamera(angle)
-	TweenService:Create(camera, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
-		CFrame = camera.CFrame * CFrame.Angles(0, 0, math.rad(angle))
-	}):Play()
+local function setTargetRoll(angle)
+	cameraRollTarget = math.rad(angle)
 end
 
 local function stopSlide()
@@ -117,7 +134,7 @@ local function startSlide()
 		dir.Z * Config.SlideSpeed
 	)
 
-	tiltCamera(Config.CameraTiltAngle)
+	setTargetRoll(Config.CameraTiltAngle)
 
 	local elapsed = 0
 	slideConn = RunService.Heartbeat:Connect(function(dt)
@@ -131,7 +148,7 @@ local function startSlide()
 		humanoid.WalkSpeed = Config.SlideSpeed * (1 - t) + normalSpeed * t
 
 		if elapsed >= Config.SlideDuration then
-			tiltCamera(-Config.CameraTiltAngle)
+			setTargetRoll(0)
 			if slideTrack and slideTrack.IsPlaying then
 				slideTrack:Stop(0.15)
 			end
@@ -153,7 +170,7 @@ end)
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		if isSliding then
-			tiltCamera(-Config.CameraTiltAngle)
+			setTargetRoll(0)
 			stopSlide()
 		end
 	end
@@ -220,7 +237,7 @@ end)
 btn.MouseButton1Up:Connect(function()
 	pressEffect(false)
 	if isSliding then
-		tiltCamera(-Config.CameraTiltAngle)
+		setTargetRoll(0)
 		stopSlide()
 	end
 end)
