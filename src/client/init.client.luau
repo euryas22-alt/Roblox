@@ -116,13 +116,13 @@ end)
 -- ============================================
 -- DASH
 -- ============================================
-local DASH_SPEED       = 65
-local DASH_DURATION    = 0.35
+local DASH_SPEED       = 100   -- dinaikkan agar lebih jauh
+local DASH_DURATION    = 0.55  -- durasi lebih panjang = jarak lebih jauh
 local DASH_COOLDOWN    = 1.2
 local MAX_DASH_CHARGES = 2
 local DASH_TILT        = 12
 local NORMAL_FOV       = 70
-local DASH_FOV         = 90
+local DASH_FOV         = 95
 
 local dashCharges  = MAX_DASH_CHARGES
 local isDashing    = false
@@ -301,15 +301,26 @@ end)
 -- Bebas lompat selama belum menyentuh tanah/platform
 -- Reset hanya saat mendarat
 -- ============================================
-local MAX_JUMPS = 2       -- total lompatan (1 normal + 1 double jump)
-local jumpCount = 0       -- berapa kali sudah lompat sejak terakhir mendarat
-local isAirborne = false  -- apakah sedang di udara
+local MAX_JUMPS  = 2
+local jumpCount  = 0
+local isAirborne = false
+local JUMP_POWER = 50   -- setara JumpPower default Roblox
+
+-- Fungsi jump terpusat — pakai velocity langsung, tidak pakai ChangeState
+-- ChangeState(Jumping) sering gagal saat FreeFall, velocity lebih andal
+local function doJump()
+	-- Reset Y velocity dulu agar ketinggian lompatan konsisten
+	hrp.AssemblyLinearVelocity = Vector3.new(
+		hrp.AssemblyLinearVelocity.X,
+		JUMP_POWER,
+		hrp.AssemblyLinearVelocity.Z
+	)
+end
 
 humanoid.StateChanged:Connect(function(old, new)
 	if new == Enum.HumanoidStateType.Jumping or new == Enum.HumanoidStateType.FreeFall then
 		isAirborne = true
 	elseif new == Enum.HumanoidStateType.Landed or new == Enum.HumanoidStateType.Running then
-		-- Menyentuh tanah/platform: reset
 		jumpCount  = 0
 		isAirborne = false
 	end
@@ -317,12 +328,12 @@ end)
 
 UserInputService.JumpRequest:Connect(function()
 	if not isAirborne then
-		-- Lompatan pertama: biarkan Roblox tangani, catat saja
+		-- Lompatan pertama: Roblox tangani, kita catat
 		jumpCount  = 1
 		isAirborne = true
 	elseif jumpCount < MAX_JUMPS then
-		-- Double jump
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		-- Double jump via velocity langsung
+		doJump()
 		jumpCount += 1
 	end
 end)
@@ -332,11 +343,11 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton3 then
 		if not isAirborne then
-			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			doJump()
 			jumpCount  = 1
 			isAirborne = true
 		elseif jumpCount < MAX_JUMPS then
-			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			doJump()
 			jumpCount += 1
 		end
 	end
