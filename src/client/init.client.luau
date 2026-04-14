@@ -20,7 +20,7 @@ local Config = {
 	SlideSpeed       = 45,
 	SlideDuration    = 1.4,
 	SlideCooldown    = 1.0,
-	SlideHipHeight   = -0.9,
+	SlideHipHeight   = 0.15,   -- positif kecil: karakter tetap di atas lantai
 	CameraTiltAngle  = 6,
 	SlideAnimationId = "rbxassetid://90262328649285",
 }
