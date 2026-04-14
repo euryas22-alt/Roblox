@@ -97,10 +97,7 @@ function SlideController:Init()
 	local function startSlide()
 		if isSliding or not canSlide then return end
 
-		local vel   = hrp.AssemblyLinearVelocity
-		local speed = Vector3.new(vel.X, 0, vel.Z).Magnitude
-
-		if speed < Config.MinSpeedToSlide then return end
+		local vel = hrp.AssemblyLinearVelocity
 
 		isSliding = true
 
@@ -151,7 +148,7 @@ function SlideController:Init()
 	-- INPUT
 	-- ============================================
 	UserInputService.InputBegan:Connect(function(input, gpe)
-		if gpe then return end
+		-- Tidak pakai 'if gpe then return end' agar klik kiri selalu trigger slide
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			startSlide()
 		end
