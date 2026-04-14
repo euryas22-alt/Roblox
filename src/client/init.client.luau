@@ -17,33 +17,34 @@ local camera    = workspace.CurrentCamera
 -- SETTINGS
 -- ============================================
 local Config = {
-	SlideSpeed       = 45,
-	SlideDuration    = 1.4,
-	SlideCooldown    = 1.0,
-	SlideHipHeight   = 0.15,   -- positif kecil: karakter tetap di atas lantai
-	CameraTiltAngle  = 6,
-	SlideAnimationId = "rbxassetid://90262328649285",
+	DashSpeed       = 65,     -- kecepatan burst awal (Genshin-like)
+	DashDuration    = 0.4,    -- durasi singkat & snappy
+	DashCooldown    = 0.7,    -- cooldown
+	CameraTiltAngle = 10,     -- tilt lebih dramatis
+	NormalFOV       = 70,     -- FOV default
+	DashFOV         = 85,     -- FOV melebar saat dash (efek kecepatan)
+	DashAnimationId = "rbxassetid://90262328649285",
 }
 
 -- ============================================
 -- STATE
 -- ============================================
-local isSliding   = false
-local canSlide    = true
-local slideConn   = nil
-local slideTrack  = nil
-local normalHip   = humanoid.HipHeight
+local isDashing  = false
+local canDash    = true
+local dashConn   = nil
+local slideTrack = nil
+local normalHip  = humanoid.HipHeight
 local normalSpeed = humanoid.WalkSpeed
 
 -- Camera roll state
-local cameraRoll       = 0   -- nilai roll saat ini (radian)
-local cameraRollTarget = 0   -- target roll (radian)
+local cameraRoll       = 0
+local cameraRollTarget = 0
 
 -- ============================================
 -- ANIMATION
 -- ============================================
 local slideAnim = Instance.new("Animation")
-slideAnim.AnimationId = Config.SlideAnimationId
+slideAnim.AnimationId = Config.DashAnimationId
 
 local function loadAnimation()
 	if slideTrack then
@@ -78,61 +79,64 @@ local function setTargetRoll(angle)
 	cameraRollTarget = math.rad(angle)
 end
 
-local function stopSlide()
-	if not isSliding then return end
-	isSliding = false
-
-	-- Blend out slide animation lebih lama agar tidak terpotong mendadak
-	if slideTrack and slideTrack.IsPlaying then
-		slideTrack:Stop(0.35)
-	end
-
-	if slideConn then
-		slideConn:Disconnect()
-		slideConn = nil
-	end
-
-	-- Tahan WalkSpeed = 0 selama proses berdiri
-	-- (agar karakter tidak jalan saat masih rebahan/setengah berdiri)
-	humanoid.WalkSpeed = 0
-
-	-- Tween HipHeight smooth ke posisi berdiri
-	local standDuration = 0.45
-	TweenService:Create(humanoid, TweenInfo.new(standDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		HipHeight = normalHip
+-- Set FOV kamera dengan smooth tween
+local function setFOV(fov)
+	TweenService:Create(camera, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {
+		FieldOfView = fov
 	}):Play()
+end
 
-	-- Restore WalkSpeed SETELAH karakter selesai berdiri penuh
-	task.delay(standDuration, function()
-		if not isSliding then
-			humanoid.WalkSpeed = normalSpeed
+-- I-frames: set CanCollide pada semua limb karakter
+local function setCharacterCollision(enabled)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.CanCollide = enabled
 		end
-	end)
+	end
+end
 
-	canSlide = false
-	task.delay(Config.SlideCooldown, function()
-		canSlide = true
+local function stopDash()
+	if not isDashing then return end
+	isDashing = false
+
+	-- Blend out animasi dash
+	if slideTrack and slideTrack.IsPlaying then
+		slideTrack:Stop(0.2)
+	end
+
+	if dashConn then
+		dashConn:Disconnect()
+		dashConn = nil
+	end
+
+	-- Kembalikan collision (i-frames selesai)
+	setCharacterCollision(true)
+
+	-- Kembalikan kamera
+	setTargetRoll(0)
+	setFOV(Config.NormalFOV)
+
+	-- Langsung restore WalkSpeed → langsung lari (Genshin-like)
+	humanoid.WalkSpeed = normalSpeed
+
+	canDash = false
+	task.delay(Config.DashCooldown, function()
+		canDash = true
 	end)
 end
 
-local function startSlide()
-	if isSliding or not canSlide then return end
+local function startDash()
+	if isDashing or not canDash then return end
 
-	isSliding = true
+	isDashing = true
 
 	if slideTrack and not slideTrack.IsPlaying then
-		slideTrack:Play(0.1)
+		slideTrack:Play(0.05)  -- blend in cepat untuk feel snappy
 	end
 
-	-- Baca durasi dari animasi; fallback ke Config.SlideDuration jika belum ter-stream
-	local slideDuration = (slideTrack and slideTrack.Length > 0.01)
-		and slideTrack.Length
-		or Config.SlideDuration
-
+	-- Arah dash: dari velocity atau depan kamera
 	local vel     = hrp.AssemblyLinearVelocity
 	local flatVel = Vector3.new(vel.X, 0, vel.Z)
-
-	-- Jika diam, pakai arah depan kamera
 	local dir
 	if flatVel.Magnitude > 0.1 then
 		dir = flatVel.Unit
@@ -141,64 +145,55 @@ local function startSlide()
 		dir = Vector3.new(camLook.X, 0, camLook.Z).Unit
 	end
 
-	-- ✅ Set HipHeight (jongkok) dan matikan WalkSpeed
-	-- WalkSpeed = 0 agar player tidak bisa tambah kecepatan sendiri saat slide
-	-- dan agar animasi jalan tidak ikut jalan saat slide
+	-- WalkSpeed = 0 saat dash (velocity dikontrol manual)
 	humanoid.WalkSpeed = 0
-	TweenService:Create(humanoid, TweenInfo.new(0.1, Enum.EasingStyle.Quad), {
-		HipHeight = Config.SlideHipHeight
-	}):Play()
 
-	-- ✅ Set velocity awal slide via AssemblyLinearVelocity (bukan WalkSpeed)
-	local slideVelX = dir.X * Config.SlideSpeed
-	local slideVelZ = dir.Z * Config.SlideSpeed
+	-- I-frames: matikan collision semua limb selama dash
+	setCharacterCollision(false)
+
+	-- Efek kamera: tilt + FOV melebar
+	setTargetRoll(Config.CameraTiltAngle)
+	setFOV(Config.DashFOV)
+
+	-- Burst velocity awal
 	hrp.AssemblyLinearVelocity = Vector3.new(
-		slideVelX,
+		dir.X * Config.DashSpeed,
 		hrp.AssemblyLinearVelocity.Y,
-		slideVelZ
+		dir.Z * Config.DashSpeed
 	)
 
-	setTargetRoll(Config.CameraTiltAngle)
-
-	-- === TRIGGER UTAMA: animasi selesai → otomatis stop slide ===
+	-- Trigger utama: animasi selesai → stop dash
 	if slideTrack then
 		local conn
 		conn = slideTrack.Stopped:Connect(function()
 			conn:Disconnect()
-			if isSliding then
-				setTargetRoll(0)
-				stopSlide()
-			end
+			if isDashing then stopDash() end
 		end)
 	end
 
-	-- === FALLBACK: Heartbeat fade velocity & safety stop ===
+	-- Heartbeat: exponential decay velocity (burst cepat lalu smooth ke 0)
 	local elapsed = 0
-	slideConn = RunService.Heartbeat:Connect(function(dt)
-		if not isSliding then
-			slideConn:Disconnect()
+	dashConn = RunService.Heartbeat:Connect(function(dt)
+		if not isDashing then
+			dashConn:Disconnect()
 			return
 		end
 
 		elapsed = elapsed + dt
-		local t = math.clamp(elapsed / slideDuration, 0, 1)
+		local t = math.clamp(elapsed / Config.DashDuration, 0, 1)
 
-		-- ✅ Fade velocity secara langsung (bukan WalkSpeed)
-		-- Sehingga animasi jalan tidak terpengaruh
-		local currentSpeed = Config.SlideSpeed * (1 - t)
+		-- Exponential decay: kecepatan turun cepat di akhir (seperti Genshin)
+		local easeOut = 1 - (1 - t)^3
+		local currentSpeed = Config.DashSpeed * (1 - easeOut)
 		hrp.AssemblyLinearVelocity = Vector3.new(
 			dir.X * currentSpeed,
 			hrp.AssemblyLinearVelocity.Y,
 			dir.Z * currentSpeed
 		)
 
-		-- Safety fallback: paksa stop jika melebihi durasi
-		if elapsed >= slideDuration then
-			setTargetRoll(0)
-			if slideTrack and slideTrack.IsPlaying then
-				slideTrack:Stop(0.15)
-			end
-			stopSlide()
+		-- Safety stop
+		if elapsed >= Config.DashDuration then
+			stopDash()
 		end
 	end)
 end
@@ -209,17 +204,12 @@ end
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		startSlide()
+		startDash()
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		if isSliding then
-			setTargetRoll(0)
-			stopSlide()
-		end
-	end
+	-- Dash tidak bisa di-cancel dengan lepas klik (Genshin-like: dash langsung selesai sendiri)
 end)
 
 -- ============================================
@@ -277,15 +267,12 @@ end
 
 btn.MouseButton1Down:Connect(function()
 	pressEffect(true)
-	startSlide()
+	startDash()
 end)
 
 btn.MouseButton1Up:Connect(function()
 	pressEffect(false)
-	if isSliding then
-		setTargetRoll(0)
-		stopSlide()
-	end
+	-- Dash tidak bisa di-cancel (selesai sendiri)
 end)
 
 -- ============================================
@@ -297,14 +284,14 @@ player.CharacterAdded:Connect(function(newChar)
 	animator    = humanoid:WaitForChild("Animator")
 	hrp         = newChar:WaitForChild("HumanoidRootPart")
 
-	isSliding   = false
-	canSlide    = true
+	isDashing   = false
+	canDash     = true
 	normalHip   = humanoid.HipHeight
 	normalSpeed = humanoid.WalkSpeed
 
-	if slideConn then
-		slideConn:Disconnect()
-		slideConn = nil
+	if dashConn then
+		dashConn:Disconnect()
+		dashConn = nil
 	end
 
 	loadAnimation()
