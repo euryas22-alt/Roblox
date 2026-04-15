@@ -8,6 +8,8 @@ local TweenService     = game:GetService("TweenService")
 local RunService       = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
 
+require(script:WaitForChild("SC_PlayerPlatform_KAzzamAL"))
+
 local player    = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid  = character:WaitForChild("Humanoid")
