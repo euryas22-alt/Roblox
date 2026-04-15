@@ -2,7 +2,6 @@
 local modules = {
 	"SC_Setup leaderstats_Rizalghazi",
 	"SC_CheckpointSystem_KAzzamAL",
-	"SC_MovingPlatform_KAzzamAL",
 }
 
 for _, moduleName in ipairs(modules) do

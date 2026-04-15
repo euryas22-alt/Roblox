@@ -1,2 +1,0 @@
--- Moving platform mover runs from ServerScriptService.
--- This client file is intentionally left as a no-op to avoid duplicate tweens.
