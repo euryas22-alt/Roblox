@@ -26,6 +26,7 @@ local regen       = 10  -- stamina pulih per detik saat tidak sprint
 local jumpCount = 0
 local sprinting = false
 local stamina   = maxStamina
+local lastJumpTime = 0
 
 -- FIX #4: Baca normalSpeed dari Humanoid langsung,
 --         bukan hardcode angka 16
@@ -57,9 +58,32 @@ local function isOnGround()
 end
 
 UIS.JumpRequest:Connect(function()
+	local now = os.clock()
+	
+	-- Mencegah spam jump dari tombol yang ditahan
+	if now - lastJumpTime < 0.25 then return end
+	
+	local state = humanoid:GetState()
+	
+	-- Kasus 1: Melompat pertama kali saat di tanah
+	if state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.Landed or isOnGround() then
+		lastJumpTime = now
+		jumpCount = 1
+		return
+	end
+	
+	-- Kasus 2: Melompat di udara dalam segala kondisi (Freefall, dll)
 	if jumpCount < maxJump then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		lastJumpTime = now
 		jumpCount += 1
+		
+		-- Paksa pemutaran animasi lompat
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		
+		-- Berikan velocity manual (gaya angkat ke atas minimal sesuai JumpPower/Height)
+		local jumpVel = humanoid.UseJumpPower and humanoid.JumpPower or math.sqrt(2 * workspace.Gravity * humanoid.JumpHeight)
+		local currentVel = root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity = Vector3.new(currentVel.X, jumpVel, currentVel.Z)
 	end
 end)
 
@@ -91,7 +115,10 @@ RunService.RenderStepped:Connect(function(dt)
 
 	-- FIX #1 (bagian 2 lanjutan): Kalau di tanah, reset jumpCount
 	if isOnGround() and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-		jumpCount = 0
+		-- Jangan reset jatah langsung jika baru saja melompat (menunggu animasi terbang)
+		if os.clock() - lastJumpTime > 0.25 then
+			jumpCount = 0
+		end
 	end
 
 	-- FIX #4: Update normalSpeed kalau ada script lain yang ubah WalkSpeed
