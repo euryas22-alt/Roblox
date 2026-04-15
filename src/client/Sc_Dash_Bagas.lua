@@ -64,11 +64,7 @@ function DashController:Init()
 	-- ============================================
 	-- FUNCTIONS
 	-- ============================================
-	local function tiltCamera(angle)
-		TweenService:Create(camera, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
-			CFrame = camera.CFrame * CFrame.Angles(0, 0, math.rad(angle))
-		}):Play()
-	end
+	-- tiltCamera dihapus karena menyebabkan kamera miring ke kiri (roll sumbu Z)
 
 	local function stopDash()
 		if not isDashing then return end
@@ -126,7 +122,7 @@ function DashController:Init()
 			dir.Z * Config.DashSpeed
 		)
 
-		tiltCamera(Config.CameraTiltAngle)
+
 
 		local elapsed = 0
 		dashConn = RunService.Heartbeat:Connect(function(dt)
@@ -141,7 +137,7 @@ function DashController:Init()
 			humanoid.WalkSpeed = Config.DashSpeed * (1 - t) + normalSpeed * t
 
 			if elapsed >= Config.DashDuration then
-				tiltCamera(-Config.CameraTiltAngle)
+
 
 				if dashTrack and dashTrack.IsPlaying then
 					dashTrack:Stop(0.15)
@@ -165,7 +161,6 @@ function DashController:Init()
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			if isDashing then
-				tiltCamera(-Config.CameraTiltAngle)
 				stopDash()
 			end
 		end
@@ -232,7 +227,6 @@ function DashController:Init()
 	btn.MouseButton1Up:Connect(function()
 		pressEffect(false)
 		if isDashing then
-			tiltCamera(-Config.CameraTiltAngle)
 			stopDash()
 		end
 	end)
