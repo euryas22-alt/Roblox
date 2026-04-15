@@ -94,6 +94,8 @@ end)
 
 RunService.Heartbeat:Connect(function(dt)
 	-- Jangan ubah speed kalau sedang dash (dihandle di bawah)
+	if isDashing then return end
+
 	if isSprinting and sprintStamina > 0 then
 		humanoid.WalkSpeed = SPRINT_SPEED
 		sprintStamina -= SPRINT_DRAIN * dt
@@ -127,6 +129,7 @@ local DASH_FOV         = 95
 local dashCharges  = MAX_DASH_CHARGES
 local isDashing    = false
 local dashConn     = nil
+local activeDashForce = nil
 
 local function setFOV(fov)
 	TweenService:Create(camera, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
@@ -143,6 +146,11 @@ local function stopDash()
 		dashConn = nil
 	end
 
+	if activeDashForce then
+		activeDashForce:Destroy()
+		activeDashForce = nil
+	end
+
 	cameraRollTarget = 0
 	setFOV(NORMAL_FOV)
 	-- Kembalikan speed ke sprint atau normal
@@ -154,6 +162,7 @@ local function startDash()
 
 	if isDashing then
 		if dashConn then dashConn:Disconnect(); dashConn = nil end
+		if activeDashForce then activeDashForce:Destroy(); activeDashForce = nil end
 		isDashing = false
 	end
 
@@ -188,12 +197,18 @@ local function startDash()
 	bv.MaxForce = Vector3.new(1e5, 0, 1e5)  -- hanya X & Z, Y bebas (gravity tetap)
 	bv.Name = "DashForce"
 	bv.Parent = hrp
+	activeDashForce = bv
 
 	local elapsed = 0
 	dashConn = RunService.Heartbeat:Connect(function(dt)
 		if not isDashing then
 			dashConn:Disconnect()
-			bv:Destroy()
+			if bv.Parent then
+				bv:Destroy()
+			end
+			if activeDashForce == bv then
+				activeDashForce = nil
+			end
 			return
 		end
 
@@ -208,7 +223,6 @@ local function startDash()
 
 		if elapsed >= DASH_DURATION then
 			stopDash()
-			if bv and bv.Parent then bv:Destroy() end
 		end
 	end)
 
@@ -367,6 +381,10 @@ player.CharacterAdded:Connect(function(newChar)
 	dashCharges  = MAX_DASH_CHARGES
 	normalSpeed  = humanoid.WalkSpeed
 	if dashConn then dashConn:Disconnect(); dashConn = nil end
+	if activeDashForce then
+		activeDashForce:Destroy()
+		activeDashForce = nil
+	end
 	-- Cleanup BodyVelocity yang mungkin tertinggal
 	local oldBV = hrp:FindFirstChild("DashForce")
 	if oldBV then oldBV:Destroy() end
