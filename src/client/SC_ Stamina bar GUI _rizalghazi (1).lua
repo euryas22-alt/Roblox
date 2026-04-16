@@ -19,7 +19,6 @@ local tipsList = {
 player.CharacterAdded:Connect(function(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	
-	
 	humanoid.Died:Connect(function()
 		tipLabel.Text = "TIPS: " .. tipsList[math.random(1, #tipsList)]
 		deathFrame.Visible = true
@@ -27,9 +26,13 @@ player.CharacterAdded:Connect(function(character)
 		deathFrame.Visible = false
 	end)
 	
-	
-	local staminaData = character:WaitForChild("StaminaValue", 10) 
+	local staminaData = character:WaitForChild("StaminaValue", 10)
+
 	if staminaData then
+		local persentase = staminaData.Value / MAX_STAMINA
+		staminaBarFill.Size = UDim2.new(persentase, 0, 1, 0)
+		staminaBarFill.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+		
 		staminaData.Changed:Connect(function(newValue)
 			local persentase = newValue / MAX_STAMINA
 			
@@ -43,5 +46,9 @@ player.CharacterAdded:Connect(function(character)
 				staminaBarFill.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
 			end
 		end)
+	else
+		warn("⚠️ StaminaValue tidak ditemukan pada character " .. character.Name)
+
+		staminaBarFill.Size = UDim2.new(1, 0, 1, 0)
 	end
 end)
