@@ -32,6 +32,18 @@ local lastJumpTime = 0
 --         bukan hardcode angka 16
 local normalSpeed = humanoid.WalkSpeed
 
+local function isSprintHandledByInit()
+	return character:GetAttribute("SprintManagedByInit") == true
+end
+
+local function syncLocalSprintState()
+	character:SetAttribute("SprintActive", sprinting)
+	character:SetAttribute("SprintStamina", stamina)
+	character:SetAttribute("SprintMaxStamina", maxStamina)
+end
+
+syncLocalSprintState()
+
 -- ============================================
 -- DOUBLE JUMP
 -- ============================================
@@ -93,18 +105,23 @@ end)
 
 UIS.InputBegan:Connect(function(input, processed)
 	if processed then return end
+	if isSprintHandledByInit() then return end
 
 	-- FIX #2: Cek stamina > 0 tetap di sini,
 	--         dan juga akan dicek terus di RenderStepped
 	if input.KeyCode == Enum.KeyCode.LeftShift and stamina > 0 then
 		sprinting = true
+		syncLocalSprintState()
 	end
 end)
 
 UIS.InputEnded:Connect(function(input)
+	if isSprintHandledByInit() then return end
+
 	if input.KeyCode == Enum.KeyCode.LeftShift then
 		sprinting = false
 		humanoid.WalkSpeed = normalSpeed
+		syncLocalSprintState()
 	end
 end)
 
@@ -123,6 +140,22 @@ RunService.RenderStepped:Connect(function(dt)
 
 	-- FIX #4: Update normalSpeed kalau ada script lain yang ubah WalkSpeed
 	--         (hanya update saat tidak sprint agar tidak konflik)
+	if isSprintHandledByInit() then
+		sprinting = character:GetAttribute("SprintActive") == true
+		local sharedStamina = character:GetAttribute("SprintStamina")
+		if typeof(sharedStamina) == "number" then
+			stamina = sharedStamina
+		end
+
+		local sharedMaxStamina = character:GetAttribute("SprintMaxStamina")
+		if typeof(sharedMaxStamina) == "number" and sharedMaxStamina > 0 then
+			maxStamina = sharedMaxStamina
+		end
+
+		normalSpeed = humanoid.WalkSpeed
+		return
+	end
+
 	if not sprinting then
 		normalSpeed = humanoid.WalkSpeed
 	end
@@ -155,6 +188,7 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 
 	stamina = math.clamp(stamina, 0, maxStamina)
+	syncLocalSprintState()
 end)
 
 -- ============================================
@@ -169,6 +203,7 @@ player.CharacterAdded:Connect(function(newChar)
 	jumpCount = 0
 	sprinting = false
 	stamina   = maxStamina
+	syncLocalSprintState()
 
 	-- Pasang ulang listener StateChanged untuk karakter baru
 	humanoid.StateChanged:Connect(function(old, new)

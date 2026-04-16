@@ -63,6 +63,15 @@ local normalSpeed   = humanoid.WalkSpeed
 local sprintStamina = SPRINT_STAMINA
 local isSprinting   = false
 
+local function syncSprintState()
+	character:SetAttribute("SprintManagedByInit", true)
+	character:SetAttribute("SprintActive", isSprinting)
+	character:SetAttribute("SprintStamina", sprintStamina)
+	character:SetAttribute("SprintMaxStamina", SPRINT_STAMINA)
+end
+
+syncSprintState()
+
 -- Sprint: LeftShift, RightShift, atau klik kanan
 local function isSprintInput(input)
 	return input.KeyCode == Enum.KeyCode.LeftShift
@@ -80,6 +89,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if isSprintInput(input) and sprintStamina > 0 then
 		isSprinting = true
+		syncSprintState()
 	end
 end)
 
@@ -88,6 +98,7 @@ UserInputService.InputEnded:Connect(function(input)
 		-- Hanya berhenti sprint jika SEMUA tombol sprint sudah dilepas
 		if not anySprintKeyHeld() then
 			isSprinting = false
+			syncSprintState()
 		end
 	end
 end)
@@ -113,6 +124,7 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 
 	sprintStamina = math.clamp(sprintStamina, 0, SPRINT_STAMINA)
+	syncSprintState()
 end)
 
 -- ============================================
@@ -397,6 +409,7 @@ player.CharacterAdded:Connect(function(newChar)
 	isSprinting   = false
 	sprintStamina = SPRINT_STAMINA
 	normalSpeed   = humanoid.WalkSpeed
+	syncSprintState()
 
 	-- Reset camera
 	cameraRoll       = 0
