@@ -1,64 +1,93 @@
 -- Ambil service penting
-local Players = game:GetService("Players") -- untuk akses player
-local RunService = game:GetService("RunService") -- untuk loop tiap frame (real-time)
+local Players = game:GetService("Players") -- akses player
+local RunService = game:GetService("RunService") -- loop tiap frame (real-time)
 
--- Ambil player lokal (client-side)
+-- Ambil player lokal
 local player = Players.LocalPlayer
 
--- Variable karakter player
+-- Variable karakter
 local character
-local rootPart -- HumanoidRootPart = pusat posisi player
-local humanoid -- sistem humanoid (hidup/mati)
+local rootPart -- pusat posisi player
+local humanoid -- sistem hidup/mati
 
--- Connection untuk Heartbeat
+-- Connection heartbeat
 local connection
 
--- Menyimpan posisi terakhir platform (CFrame sebelumnya)
-local lastPlatformCFramea
+-- Simpan posisi terakhir platform (buat bandingin gerakan)
+local lastPlatformCFrame
 
--- Fungsi utama yang jalan tiap frame
-local function onHeartbeat()
-	if not rootPart then return end -- kalau belum ada rootPart, skip
+-- 🔍 Fungsi untuk cek apakah object termasuk platform
+-- Dia akan naik ke parent terus sampai ketemu model utama
+local function isPlatform(instance)
+	while instance do
+		-- Kalau ketemu model bernama ini, anggap platform
+		if instance.Name == "MovingPlatform" or instance.Name == "SpinningBlock" then
+			return true, instance
+		end
+
+		-- Naik ke parent (biar support nested model)
+		instance = instance.Parent
+	end
+
+	return false, nil
+end
+
+-- 🔁 Fungsi utama (jalan tiap frame)
+local function onHeartbeat(dt)
+	if not rootPart then return end -- kalau belum ada player, skip
 
 	-- Setup raycast (sinar ke bawah)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterDescendantsInstances = {character} -- biar ga kena diri sendiri
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- Nembak ray ke bawah sejauh 6 studs
+	-- Tembak ray ke bawah sejauh 6 studs
 	local raycastResult = workspace:Raycast(
 		rootPart.Position,
 		Vector3.new(0, -6, 0),
 		raycastParams
 	)
 
-	-- Cek apakah player berdiri di platform bernama "MovingPlatform"
-if raycastResult and raycastResult.Instance then
-	local parent = raycastResult.Instance.Parent
+	-- Kalau kena sesuatu
+	if raycastResult and raycastResult.Instance then
 
-	-- cek apakah termasuk platform yang boleh diinjak
-	if parent and (parent.Name == "MovingPlatform" or parent.Name == "SpinningBlock") then
-		
-		local platform = raycastResult.Instance
-		local platformCFrame = platform.CFrame
+		-- Cek apakah itu platform
+		local isPlat, model = isPlatform(raycastResult.Instance)
 
-		if lastPlatformCFrame then
-			local relative = platformCFrame * lastPlatformCFrame:Inverse()
-			rootPart.CFrame = relative * rootPart.CFrame
+		if isPlat then
+			-- Part yang diinjak player
+			local platformPart = raycastResult.Instance
+
+			-- Ambil posisi & rotasi sekarang
+			local currentCFrame = platformPart.CFrame
+
+			-- Kalau sudah punya posisi sebelumnya
+			if lastPlatformCFrame then
+				-- Hitung perubahan posisi platform
+				local relative = currentCFrame * lastPlatformCFrame:Inverse()
+
+				-- Terapkan perubahan ke player
+				-- Jadi player ikut bergerak / muter
+				rootPart.CFrame = relative * rootPart.CFrame
+			end
+
+			-- Simpan posisi sekarang untuk frame berikutnya
+			lastPlatformCFrame = currentCFrame
+		else
+			-- Kalau bukan platform, reset
+			lastPlatformCFrame = nil
 		end
-
-		lastPlatformCFrame = platformCFrame
 	else
+		-- Kalau tidak kena apa-apa (jatuh), reset
 		lastPlatformCFrame = nil
 	end
-else
-	lastPlatformCFrame = nil
 end
--- Setup saat karakter spawn / respawn
+
+-- 🔄 Setup karakter saat spawn / respawn
 local function setupCharacter(char)
 	character = char
-	rootPart = character:WaitForChild("HumanoidRootPart")
-	humanoid = character:WaitForChild("Humanoid")
+	rootPart = char:WaitForChild("HumanoidRootPart")
+	humanoid = char:WaitForChild("Humanoid")
 
 	-- Reset data platform
 	lastPlatformCFrame = nil
@@ -79,7 +108,7 @@ local function setupCharacter(char)
 	end)
 end
 
--- Kalau karakter sudah ada (saat join)
+-- Kalau karakter sudah ada saat join
 if player.Character then
 	setupCharacter(player.Character)
 end
