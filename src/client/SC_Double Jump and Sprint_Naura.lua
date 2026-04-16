@@ -62,8 +62,6 @@ elseif newstate == Enum.HumanoidStateType.Jumping then
 
 	canjump = false
 
-	NumJumps += 1
-
 end
 
 end)
@@ -77,6 +75,8 @@ if character:GetAttribute("IsBusy") then return end
 if canjump and NumJumps < maxJump then
 
 	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	NumJumps += 1
+	canjump = false
 
 end
 
@@ -111,6 +111,11 @@ end)
 -- =====================
 local player = game.Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+
+local old = playerGui:FindFirstChild("StaminaUI")
+if old then
+	old:Destroy()
+end
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "StaminaUI"
