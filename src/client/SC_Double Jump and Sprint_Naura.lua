@@ -35,59 +35,75 @@ local drain = 20
 local regen = 10
 
 local sprinting = false
-local stamina   = maxStamina
 
--- FIX #4: Baca normalSpeed dari Humanoid langsung,
---         bukan hardcode angka 16
-local normalSpeed = humanoid.WalkSpeed
+humanoid.StateChanged:Connect(function(_, newstate)
 
--- ============================================
--- DOUBLE JUMP
--- ============================================
+if character:GetAttribute("IsBusy") then return end
 
--- FIX #1 (bagian 1): Reset jumpCount saat Landed
-humanoid.StateChanged:Connect(function(old, new)
-	if new == Enum.HumanoidStateType.Landed then
-		jumpCount = 0
-	end
+
+
+if newstate == Enum.HumanoidStateType.Landed then
+
+	NumJumps = 0
+
+	canjump = false
+
+
+
+elseif newstate == Enum.HumanoidStateType.Freefall then
+
+	task.delay(JumpCooldown, function()
+	canjump = true
 end)
 
--- FIX #1 (bagian 2): Fallback reset jumpCount lewat RaycastDown
--- Kalau state Landed tidak terpicu (misal kena tepi platform),
--- script tetap tahu kalau karakter sudah di tanah
-local function isOnGround()
-	local rayOrigin    = root.Position
-	local rayDirection = Vector3.new(0, -3.5, 0)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterDescendantsInstances = { character }
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	local result = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-	return result ~= nil
+
+elseif newstate == Enum.HumanoidStateType.Jumping then
+
+	canjump = false
+
+	NumJumps += 1
+
 end
 
+end)
+
 UIS.JumpRequest:Connect(function()
-	if jumpCount < maxJump then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-		jumpCount += 1
-	end
+
+if character:GetAttribute("IsBusy") then return end
+
+
+
+if canjump and NumJumps < maxJump then
+
+	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+
+end
+
 end)
 
 UIS.InputBegan:Connect(function(input, processed)
-	if processed then return end
 
-	-- FIX #2: Cek stamina > 0 tetap di sini,
-	--         dan juga akan dicek terus di RenderStepped
-	if input.KeyCode == Enum.KeyCode.LeftShift and stamina > 0 then
-		sprinting = true
-	end
+if processed then return end
+
+
+
+if input.KeyCode == Enum.KeyCode.LeftShift and stamina > 0 then
+
+	sprinting = true
+
+end
+
 end)
 
 UIS.InputEnded:Connect(function(input)
-	if input.KeyCode == Enum.KeyCode.LeftShift then
-		sprinting = false
-		humanoid.WalkSpeed = normalSpeed
-	end
+
+if input.KeyCode == Enum.KeyCode.LeftShift then
+
+	sprinting = false
+
+end
+
 end)
 
 -- =====================
@@ -124,16 +140,15 @@ fillCorner.Parent = fill
 
 RunService.RenderStepped:Connect(function(dt)
 
-	-- FIX #1 (bagian 2 lanjutan): Kalau di tanah, reset jumpCount
-	if isOnGround() and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-		jumpCount = 0
-	end
+if character:GetAttribute("IsBusy") then
 
-	-- FIX #4: Update normalSpeed kalau ada script lain yang ubah WalkSpeed
-	--         (hanya update saat tidak sprint agar tidak konflik)
-	if not sprinting then
-		normalSpeed = humanoid.WalkSpeed
-	end
+	humanoid.WalkSpeed = 0
+
+	return
+
+end
+
+
 
 if sprinting and stamina > 0 then
 
@@ -161,28 +176,18 @@ end
 
 
 
-	stamina = math.clamp(stamina, 0, maxStamina)
+stamina = math.clamp(stamina, 0, maxStamina)
+
+-- UPDATE UI
+local percent = stamina / maxStamina
+fill.Size = UDim2.new(percent, 0, 1, 0)
+
+if percent > 0.5 then
+	fill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+elseif percent > 0.2 then
+	fill.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+else
+	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+end
+
 end)
-
--- ============================================
--- RESPAWN: Reset state saat karakter respawn
--- ============================================
-player.CharacterAdded:Connect(function(newChar)
-	character    = newChar
-	humanoid     = newChar:WaitForChild("Humanoid")
-	root         = newChar:WaitForChild("HumanoidRootPart")
-	normalSpeed  = humanoid.WalkSpeed
-
-	jumpCount = 0
-	sprinting = false
-	stamina   = maxStamina
-
-	-- Pasang ulang listener StateChanged untuk karakter baru
-	humanoid.StateChanged:Connect(function(old, new)
-		if new == Enum.HumanoidStateType.Landed then
-			jumpCount = 0
-		end
-	end)
-end)
-
-print("[DoubleJump & Sprint - Naura] ✅ Loaded")
