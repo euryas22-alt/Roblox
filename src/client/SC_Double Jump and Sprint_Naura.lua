@@ -38,71 +38,71 @@ local sprinting = false
 
 humanoid.StateChanged:Connect(function(_, newstate)
 
-if character:GetAttribute("IsBusy") then return end
+	if character:GetAttribute("IsBusy") then return end
 
 
 
-if newstate == Enum.HumanoidStateType.Landed then
+	if newstate == Enum.HumanoidStateType.Landed then
 
-	NumJumps = 0
+		NumJumps = 0
 
-	canjump = false
-
-
-
-elseif newstate == Enum.HumanoidStateType.Freefall then
-
-	task.delay(JumpCooldown, function()
-	canjump = true
-end)
+		canjump = false
 
 
 
-elseif newstate == Enum.HumanoidStateType.Jumping then
+	elseif newstate == Enum.HumanoidStateType.Freefall then
 
-	canjump = false
+		task.delay(JumpCooldown, function()
+			canjump = true
+		end)
 
-end
+
+
+	elseif newstate == Enum.HumanoidStateType.Jumping then
+
+		canjump = false
+
+	end
 
 end)
 
 UIS.JumpRequest:Connect(function()
 
-if character:GetAttribute("IsBusy") then return end
+	if character:GetAttribute("IsBusy") then return end
 
 
 
-if canjump and NumJumps < maxJump then
+	if canjump and NumJumps < maxJump then
 
-	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	NumJumps += 1
-	canjump = false
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		NumJumps += 1
+		canjump = false
 
-end
+	end
 
 end)
 
 UIS.InputBegan:Connect(function(input, processed)
 
-if processed then return end
+	if processed then return end
 
 
 
-if input.KeyCode == Enum.KeyCode.LeftShift and stamina > 0 then
+	if input.KeyCode == Enum.KeyCode.LeftShift and stamina > 0 then
 
-	sprinting = true
+		sprinting = true
 
-end
+	end
 
 end)
 
 UIS.InputEnded:Connect(function(input)
 
-if input.KeyCode == Enum.KeyCode.LeftShift then
+	if input.KeyCode == Enum.KeyCode.LeftShift then
 
-	sprinting = false
+		sprinting = false
 
-end
+	end
 
 end)
 
@@ -145,54 +145,55 @@ fillCorner.Parent = fill
 
 RunService.RenderStepped:Connect(function(dt)
 
-if character:GetAttribute("IsBusy") then
+	if character:GetAttribute("IsBusy") then
 
-	humanoid.WalkSpeed = 0
+		humanoid.WalkSpeed = 0
 
-	return
+		return
 
-end
-
-
-
-if sprinting and stamina > 0 then
-
-	humanoid.WalkSpeed = sprintSpeed
-
-	stamina -= drain * dt
-
-else
-
-	humanoid.WalkSpeed = normalSpeed
-
-	stamina += regen * dt
-
-end
+	end
 
 
+	local boost = character:GetAttribute("SpeedBoost")
 
-if stamina <= 0 then
+	if sprinting and stamina > 0 then
+		stamina -= drain * dt
+	else
+		stamina += regen * dt
+	end
 
-	stamina = 0
-
-	sprinting = false
-
-end
+	if boost then
+		humanoid.WalkSpeed = 50
+	elseif sprinting and stamina > 0 then
+		humanoid.WalkSpeed = sprintSpeed
+	else
+		humanoid.WalkSpeed = normalSpeed
+	end
 
 
 
-stamina = math.clamp(stamina, 0, maxStamina)
+	if stamina <= 0 then
 
--- UPDATE UI
-local percent = stamina / maxStamina
-fill.Size = UDim2.new(percent, 0, 1, 0)
+		stamina = 0
 
-if percent > 0.5 then
-	fill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-elseif percent > 0.2 then
-	fill.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
-else
-	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-end
+		sprinting = false
+
+	end
+
+
+
+	stamina = math.clamp(stamina, 0, maxStamina)
+
+	-- UPDATE UI
+	local percent = stamina / maxStamina
+	fill.Size = UDim2.new(percent, 0, 1, 0)
+
+	if percent > 0.5 then
+		fill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+	elseif percent > 0.2 then
+		fill.BackgroundColor3 = Color3.fromRGB(255, 170, 0)
+	else
+		fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	end
 
 end)
